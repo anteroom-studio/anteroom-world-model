@@ -196,8 +196,8 @@ def run_update_cycle():
 if __name__ == "__main__":
     print("🚀 ZAI Dashboard starting...")
     
-    if ANTHROPIC_KEY == "YOUR_ANTHROPIC_API_KEY_HERE":
-        print("❌ config.py mein Anthropic API key daalo pehle!")
+    if not ANTHROPIC_KEY:
+        print("❌ ANTHROPIC_API_KEY not set — add it to .env or your environment")
         exit()
     
     # Check data exists
