@@ -9,7 +9,7 @@ import time
 import json
 import requests
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime
 from config import DATA_PATH, DATASETS, HISTORY_FROM_YEAR, UPDATE_INTERVAL
 
 # ============================================================
@@ -321,38 +321,42 @@ def update_live_data():
     print(f"\n🔄 Live data update: {datetime.now().strftime('%H:%M:%S')}")
     
     live_data = {}
-    
+
     # Latest prices
     tickers = {
         "sp500": "^GSPC",
-        "nasdaq": "^IXIC", 
+        "nasdaq": "^IXIC",
         "gold": "GC=F",
         "oil": "CL=F",
         "dollar": "DX-Y.NYB",
         "vix": "^VIX",
     }
-    
+
+    # Yahoo killed the old v7/finance/download CSV endpoint, it now 401s on the
+    # crumb/cookie check so the urllib path was silently failing every ticker.
+    # Go through yfinance like download_yahoo_data does, it handles the auth.
+    try:
+        import yfinance as yf
+    except ImportError:
+        yf = None
+
     for name, ticker in tickers.items():
+        if yf is None:
+            break
         try:
-            import urllib.request
-            end = int(datetime.now().timestamp())
-            start = int((datetime.now() - timedelta(days=5)).timestamp())
-            url = (f"https://query1.finance.yahoo.com/v7/finance/download/{ticker}"
-                   f"?period1={start}&period2={end}&interval=1d&events=history")
-            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                content = resp.read().decode()
-            from io import StringIO
-            df = pd.read_csv(StringIO(content))
-            latest = float(df["Close"].iloc[-1])
-            prev = float(df["Close"].iloc[-2]) if len(df) > 1 else latest
-            change_pct = ((latest - prev) / prev) * 100
+            df = yf.Ticker(ticker).history(period="5d", interval="1d", auto_adjust=True)
+            if df.empty:
+                continue
+            closes = df["Close"].dropna()
+            latest = float(closes.iloc[-1])
+            prev = float(closes.iloc[-2]) if len(closes) > 1 else latest
+            change_pct = ((latest - prev) / prev) * 100 if prev else 0.0
             live_data[name] = {
                 "price": latest,
                 "change_pct": round(change_pct, 2),
                 "updated": datetime.now().isoformat()
             }
-        except:
+        except Exception:
             pass
     
     # Bitcoin live
