@@ -85,12 +85,20 @@ def display(tick=0):
         print("─" * 60)
         
         outlook = pred.get("overall_market_outlook", "N/A")
-        conf = pred.get("confidence", 0)
         era = pred.get("current_era_similarity", "N/A")
-        
-        outlook_icon = {"BULLISH": "🟢", "BEARISH": "🔴", 
+
+        # the model fills confidence as "0-100" so it can come back as a float
+        # (72.5) or out of range. '█' * (conf//10) blows up on a float and the
+        # whole display() then dies into the 30s error loop, so clamp to 0-100 int.
+        try:
+            conf = int(float(pred.get("confidence", 0)))
+        except (TypeError, ValueError):
+            conf = 0
+        conf = max(0, min(100, conf))
+
+        outlook_icon = {"BULLISH": "🟢", "BEARISH": "🔴",
                         "NEUTRAL": "🟡", "VOLATILE": "🟠"}.get(outlook, "⚪")
-        
+
         print(f"  Outlook:     {outlook_icon} {outlook}")
         print(f"  Confidence:  {'█' * (conf//10)}{'░' * (10-conf//10)} {conf}%")
         print(f"  Similar to:  {era}")
