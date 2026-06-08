@@ -359,25 +359,31 @@ def update_live_data():
         except Exception:
             pass
     
-    # Bitcoin live
+    # Bitcoin + Ethereum live. CoinGecko's free endpoint rate-limits hard and
+    # rejects requests with no User-Agent (same reason download_coingecko_data
+    # sets one), so without these headers it 429s, data["bitcoin"] KeyErrors,
+    # the bare except eats it, and BOTH coins drop off the live dashboard.
+    cg_headers = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
+    cg_params = {"ids": "bitcoin,ethereum", "vs_currencies": "usd", "include_24hr_change": "true"}
+    cg_url = "https://api.coingecko.com/api/v3/simple/price"
     try:
-        r = requests.get(
-            "https://api.coingecko.com/api/v3/simple/price",
-            params={"ids": "bitcoin,ethereum", "vs_currencies": "usd", "include_24hr_change": "true"},
-            timeout=10
-        )
+        r = requests.get(cg_url, params=cg_params, headers=cg_headers, timeout=10)
+        if r.status_code == 429:
+            time.sleep(5)
+            r = requests.get(cg_url, params=cg_params, headers=cg_headers, timeout=10)
         data = r.json()
-        live_data["bitcoin"] = {
-            "price": data["bitcoin"]["usd"],
-            "change_pct": round(data["bitcoin"].get("usd_24h_change", 0), 2),
-            "updated": datetime.now().isoformat()
-        }
-        live_data["ethereum"] = {
-            "price": data["ethereum"]["usd"],
-            "change_pct": round(data["ethereum"].get("usd_24h_change", 0), 2),
-            "updated": datetime.now().isoformat()
-        }
-    except:
+        # parse each coin on its own so a partial or rate-limited response for
+        # one doesn't take the other down with it
+        for coin in ("bitcoin", "ethereum"):
+            quote = data.get(coin)
+            if not quote or "usd" not in quote:
+                continue
+            live_data[coin] = {
+                "price": quote["usd"],
+                "change_pct": round(quote.get("usd_24h_change") or 0, 2),
+                "updated": datetime.now().isoformat()
+            }
+    except Exception:
         pass
     
     # Save live data
