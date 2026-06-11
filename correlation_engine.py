@@ -213,6 +213,24 @@ def get_ai_prediction(correlations, relationships, similarities, current_data):
         with open(live_path, encoding="utf-8") as file:
             live_data = json.load(file)
 
+    # the live file can be missing or empty (standalone run before any live
+    # fetch, or a failed update) and we were passing current_data straight
+    # past the model, so it reasoned about "now" from history alone. fall back
+    # to the latest row of the merged series so the prompt always carries
+    # current conditions.
+    if not live_data and current_data is not None and not current_data.empty:
+        latest = current_data.iloc[-1]
+        recent_change = current_data.pct_change(4).iloc[-1]
+        for col in current_data.columns:
+            value = latest.get(col)
+            if pd.isna(value):
+                continue
+            change = recent_change.get(col)
+            live_data[col] = {
+                "price": round(float(value), 2),
+                "change_pct": round(float(change) * 100, 2) if pd.notna(change) else 0.0,
+            }
+
     prompt = f"""You are preparing a macro research scenario summary for Anteroom World Model.
 
 Do not present outputs as financial advice or guaranteed predictions. Treat the data as exploratory research signals.
